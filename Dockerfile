@@ -12,29 +12,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build bitcoind
-FROM ubuntu:18.04 as bitcoind-builder
+# Build Guapcoin
+FROM ubuntu:18.04 as guapcoind-builder
+ENV LANG C.UTF-8
 
 RUN mkdir -p /app \
   && chown -R nobody:nogroup /app
 WORKDIR /app
 
-# Source: https://github.com/bitcoin/bitcoin/blob/master/doc/build-unix.md#ubuntu--debian
-RUN apt-get update && apt-get install -y make gcc g++ autoconf autotools-dev bsdmainutils build-essential git libboost-all-dev \
-  libcurl4-openssl-dev libdb++-dev libevent-dev libssl-dev libtool pkg-config python python-pip libzmq3-dev wget
+# Source: https://github.com/guapcrypto/guapcoin/blob/v19_master/packaging/docker-for-gcc/Dockerfile
+RUN set -xe; \
+  apt-get update; \
+  apt-get install -y --no-install-recommends -y build-essential autotools-dev bsdmainutils automake autotools-dev autoconf pkg-config wget git libboost-dev libboost-all-dev libboost-container-dev apt-utils libssl-dev libevent-dev libsodium-dev \
+    librsvg2-bin cmake libcap-dev libdb++-dev libz-dev libtool libbz2-dev python-setuptools python3-setuptools xz-utils ccache cargo libgmp-dev \
+    bsdmainutils curl ca-certificates; \
+    rm -rf /var/lib/apt/lists/*; \
+    /usr/sbin/update-ccache-symlinks;
 
-# VERSION: Bitcoin Core 0.20.1
-RUN git clone https://github.com/bitcoin/bitcoin \
-  && cd bitcoin \
-  && git checkout 7ff64311bee570874c4f0dfa18f518552188df08
+# VERSION: Guapcoind 2.3.0
+RUN git clone https://github.com/guapcrypto/guapcoin \
+  && cd guapcoin
 
-RUN cd bitcoin \
+RUN cd guapcoin \
   && ./autogen.sh \
-  && ./configure --disable-tests --without-miniupnpc --without-gui --with-incompatible-bdb --disable-hardening --disable-zmq --disable-bench --disable-wallet \
-  && make
+  && ./configure --enable-static --with-pic --disable-shared --enable-glibc-back-compat --disable-tests --without-miniupnpc --without-gui --with-incompatible-bdb --disable-hardening --disable-zmq --disable-bench \
+  && make -j$(getconf _NPROCESSORS_ONLN)
 
-RUN mv bitcoin/src/bitcoind /app/bitcoind \
-  && rm -rf bitcoin
+
+RUN mv guapcoin/src/guapcoind /app/guapcoind \
+  && rm -rf guapcoin
+
+RUN ldconfig
 
 # Build Rosetta Server Components
 FROM ubuntu:18.04 as rosetta-builder
@@ -58,19 +66,25 @@ ENV PATH $GOPATH/bin:/usr/local/go/bin:$PATH
 RUN mkdir -p "$GOPATH/src" "$GOPATH/bin" && chmod -R 777 "$GOPATH"
 
 # Use native remote build context to build in any directory
-COPY . src 
+COPY . src
+## Cleanup
+RUN cd src \
+&& rm go.sum \
+&& go mod edit -replace github.com/golang/lint=golang.org/x/lint@latest \
+&& go clean -modcache
+
 RUN cd src \
   && go build \
   && cd .. \
-  && mv src/rosetta-bitcoin /app/rosetta-bitcoin \
+  && mv src/rosetta-guapcoin /app/rosetta-guapcoin \
   && mv src/assets/* /app \
-  && rm -rf src 
+  && rm -rf src
 
 ## Build Final Image
 FROM ubuntu:18.04
 
 RUN apt-get update && \
-  apt-get install --no-install-recommends -y libevent-dev libboost-system-dev libboost-filesystem-dev libboost-test-dev libboost-thread-dev && \
+  apt-get install -y --no-install-recommends libevent-dev libboost-system-dev libboost-filesystem-dev libboost-program-options-dev libdb5.3++-dev libboost-test-dev libboost-thread-dev libsodium-dev && \
   apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN mkdir -p /app \
@@ -80,8 +94,8 @@ RUN mkdir -p /app \
 
 WORKDIR /app
 
-# Copy binary from bitcoind-builder
-COPY --from=bitcoind-builder /app/bitcoind /app/bitcoind
+# Copy binary from guapcoind-builder
+COPY --from=guapcoind-builder /app/guapcoind /app/guapcoind
 
 # Copy binary from rosetta-builder
 COPY --from=rosetta-builder /app/* /app/
@@ -89,4 +103,4 @@ COPY --from=rosetta-builder /app/* /app/
 # Set permissions for everything added to /app
 RUN chmod -R 755 /app/*
 
-CMD ["/app/rosetta-bitcoin"]
+CMD ["/app/rosetta-guapcoin"]

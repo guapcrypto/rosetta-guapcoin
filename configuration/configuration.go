@@ -22,11 +22,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/coinbase/rosetta-bitcoin/bitcoin"
+	"github.com/guapcrypto/rosetta-guapcoin/guap"
 
 	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/coinbase/rosetta-sdk-go/storage/encoder"
-	"github.com/coinbase/rosetta-sdk-go/types"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/encoder"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
 )
 
 // Mode is the setting that determines if
@@ -42,34 +42,34 @@ const (
 	// to make outbound connections.
 	Offline Mode = "OFFLINE"
 
-	// Mainnet is the Bitcoin Mainnet.
+	// Mainnet is the guap Mainnet.
 	Mainnet string = "MAINNET"
 
-	// Testnet is Bitcoin Testnet3.
+	// Testnet is guap Testnet3.
 	Testnet string = "TESTNET"
 
-	// mainnetConfigPath is the path of the Bitcoin
+	// mainnetConfigPath is the path of the guap
 	// configuration file for mainnet.
-	mainnetConfigPath = "/app/bitcoin-mainnet.conf"
+	mainnetConfigPath = "/app/guap-mainnet.conf"
 
-	// testnetConfigPath is the path of the Bitcoin
+	// testnetConfigPath is the path of the guap
 	// configuration file for testnet.
-	testnetConfigPath = "/app/bitcoin-testnet.conf"
+	testnetConfigPath = "/app/guap-testnet.conf"
 
 	// Zstandard compression dictionaries
 	transactionNamespace         = "transaction"
 	testnetTransactionDictionary = "/app/testnet-transaction.zstd"
 	mainnetTransactionDictionary = "/app/mainnet-transaction.zstd"
 
-	mainnetRPCPort = 8332
-	testnetRPCPort = 18332
+	mainnetRPCPort = 9634
+	testnetRPCPort = 19245
 
 	// min prune depth is 288:
-	// https://github.com/bitcoin/bitcoin/blob/ad2952d17a2af419a04256b10b53c7377f826a27/src/validation.h#L84
+	// https://github.com/guap/guap/blob/ad2952d17a2af419a04256b10b53c7377f826a27/src/validation.h#L84
 	pruneDepth = int64(10000) //nolint
 
 	// min prune height (on mainnet):
-	// https://github.com/bitcoin/bitcoin/blob/62d137ac3b701aae36c1aa3aa93a83fd6357fde6/src/chainparams.cpp#L102
+	// https://github.com/guap/guap/blob/62d137ac3b701aae36c1aa3aa93a83fd6357fde6/src/chainparams.cpp#L102
 	minPruneHeight = int64(100000) //nolint
 
 	// attempt to prune once an hour
@@ -79,8 +79,8 @@ const (
 	// persistent data.
 	DataDirectory = "/data"
 
-	bitcoindPath = "bitcoind"
-	indexerPath  = "indexer"
+	GuapcoindPath = "guapcoind"
+	indexerPath = "indexer"
 
 	// allFilePermissions specifies anyone can do anything
 	// to the file.
@@ -120,7 +120,7 @@ type Configuration struct {
 	ConfigPath             string
 	Pruning                *PruningConfiguration
 	IndexerPath            string
-	BitcoindPath           string
+	GuapcoindPath          string
 	Compressors            []*encoder.CompressorEntry
 }
 
@@ -143,9 +143,9 @@ func LoadConfiguration(baseDirectory string) (*Configuration, error) {
 			return nil, fmt.Errorf("%w: unable to create indexer path", err)
 		}
 
-		config.BitcoindPath = path.Join(baseDirectory, bitcoindPath)
-		if err := ensurePathExists(config.BitcoindPath); err != nil {
-			return nil, fmt.Errorf("%w: unable to create bitcoind path", err)
+		config.GuapcoindPath = path.Join(baseDirectory, GuapcoindPath)
+		if err := ensurePathExists(config.GuapcoindPath); err != nil {
+			return nil, fmt.Errorf("%w: unable to create Guapcoind path", err)
 		}
 	case Offline:
 		config.Mode = Offline
@@ -159,12 +159,12 @@ func LoadConfiguration(baseDirectory string) (*Configuration, error) {
 	switch networkValue {
 	case Mainnet:
 		config.Network = &types.NetworkIdentifier{
-			Blockchain: bitcoin.Blockchain,
-			Network:    bitcoin.MainnetNetwork,
+			Blockchain: guap.Blockchain,
+			Network:    guap.MainnetNetwork,
 		}
-		config.GenesisBlockIdentifier = bitcoin.MainnetGenesisBlockIdentifier
-		config.Params = bitcoin.MainnetParams
-		config.Currency = bitcoin.MainnetCurrency
+		config.GenesisBlockIdentifier = guap.MainnetGenesisBlockIdentifier
+		config.Params = guap.MainnetParams
+		config.Currency = guap.MainnetCurrency
 		config.ConfigPath = mainnetConfigPath
 		config.RPCPort = mainnetRPCPort
 		config.Compressors = []*encoder.CompressorEntry{
@@ -175,12 +175,12 @@ func LoadConfiguration(baseDirectory string) (*Configuration, error) {
 		}
 	case Testnet:
 		config.Network = &types.NetworkIdentifier{
-			Blockchain: bitcoin.Blockchain,
-			Network:    bitcoin.TestnetNetwork,
+			Blockchain: guap.Blockchain,
+			Network:    guap.TestnetNetwork,
 		}
-		config.GenesisBlockIdentifier = bitcoin.TestnetGenesisBlockIdentifier
-		config.Params = bitcoin.TestnetParams
-		config.Currency = bitcoin.TestnetCurrency
+		config.GenesisBlockIdentifier = guap.TestnetGenesisBlockIdentifier
+		config.Params = guap.TestnetParams
+		config.Currency = guap.TestnetCurrency
 		config.ConfigPath = testnetConfigPath
 		config.RPCPort = testnetRPCPort
 		config.Compressors = []*encoder.CompressorEntry{

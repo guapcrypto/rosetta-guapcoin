@@ -17,9 +17,9 @@ package indexer
 import (
 	"context"
 
-	"github.com/coinbase/rosetta-sdk-go/storage/database"
-	"github.com/coinbase/rosetta-sdk-go/storage/modules"
-	"github.com/coinbase/rosetta-sdk-go/types"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/database"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/modules"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
 )
 
 var _ modules.CoinStorageHelper = (*CoinStorageHelper)(nil)

@@ -17,10 +17,10 @@ package services
 import (
 	"context"
 
-	"github.com/coinbase/rosetta-bitcoin/configuration"
+	"github.com/guapcrypto/rosetta-guapcoin/configuration"
 
-	"github.com/coinbase/rosetta-sdk-go/server"
-	"github.com/coinbase/rosetta-sdk-go/types"
+	"github.com/guapcrypto/rosetta-sdk-go/server"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
 )
 
 // BlockAPIService implements the server.BlockAPIServicer interface.

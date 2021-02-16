@@ -20,11 +20,11 @@ import (
 	"path"
 	"testing"
 
-	"github.com/coinbase/rosetta-bitcoin/bitcoin"
+	"github.com/guapcrypto/rosetta-guapcoin/guap"
 
-	"github.com/coinbase/rosetta-sdk-go/storage/encoder"
-	"github.com/coinbase/rosetta-sdk-go/types"
-	"github.com/coinbase/rosetta-sdk-go/utils"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/encoder"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
+	"github.com/guapcrypto/rosetta-sdk-go/utils"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -56,12 +56,12 @@ func TestLoadConfiguration(t *testing.T) {
 			cfg: &Configuration{
 				Mode: Online,
 				Network: &types.NetworkIdentifier{
-					Network:    bitcoin.MainnetNetwork,
-					Blockchain: bitcoin.Blockchain,
+					Network:    guap.MainnetNetwork,
+					Blockchain: guap.Blockchain,
 				},
-				Params:                 bitcoin.MainnetParams,
-				Currency:               bitcoin.MainnetCurrency,
-				GenesisBlockIdentifier: bitcoin.MainnetGenesisBlockIdentifier,
+				Params:                 guap.MainnetParams,
+				Currency:               guap.MainnetCurrency,
+				GenesisBlockIdentifier: guap.MainnetGenesisBlockIdentifier,
 				Port:                   1000,
 				RPCPort:                mainnetRPCPort,
 				ConfigPath:             mainnetConfigPath,
@@ -85,12 +85,12 @@ func TestLoadConfiguration(t *testing.T) {
 			cfg: &Configuration{
 				Mode: Online,
 				Network: &types.NetworkIdentifier{
-					Network:    bitcoin.TestnetNetwork,
-					Blockchain: bitcoin.Blockchain,
+					Network:    guap.TestnetNetwork,
+					Blockchain: guap.Blockchain,
 				},
-				Params:                 bitcoin.TestnetParams,
-				Currency:               bitcoin.TestnetCurrency,
-				GenesisBlockIdentifier: bitcoin.TestnetGenesisBlockIdentifier,
+				Params:                 guap.TestnetParams,
+				Currency:               guap.TestnetCurrency,
+				GenesisBlockIdentifier: guap.TestnetGenesisBlockIdentifier,
 				Port:                   1000,
 				RPCPort:                testnetRPCPort,
 				ConfigPath:             testnetConfigPath,
@@ -143,7 +143,7 @@ func TestLoadConfiguration(t *testing.T) {
 				assert.Contains(t, err.Error(), test.err.Error())
 			} else {
 				test.cfg.IndexerPath = path.Join(newDir, "indexer")
-				test.cfg.BitcoindPath = path.Join(newDir, "bitcoind")
+				test.cfg.guapcoindPath = path.Join(newDir, "guapcoind")
 				assert.Equal(t, test.cfg, cfg)
 				assert.NoError(t, err)
 			}

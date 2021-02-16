@@ -19,11 +19,11 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/coinbase/rosetta-sdk-go/asserter"
-	"github.com/coinbase/rosetta-sdk-go/parser"
-	"github.com/coinbase/rosetta-sdk-go/storage/database"
-	"github.com/coinbase/rosetta-sdk-go/storage/modules"
-	"github.com/coinbase/rosetta-sdk-go/types"
+	"github.com/guapcrypto/rosetta-sdk-go/asserter"
+	"github.com/guapcrypto/rosetta-sdk-go/parser"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/database"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/modules"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
 )
 
 var _ modules.BalanceStorageHelper = (*BalanceStorageHelper)(nil)

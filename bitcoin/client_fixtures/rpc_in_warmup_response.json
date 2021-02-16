@@ -1,8 +1,0 @@
-{
-    "result": null,
-    "error": {
-        "code": -28,
-        "message": "rpc in warmup"
-    },
-    "id": 1
-}

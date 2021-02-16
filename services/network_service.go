@@ -17,11 +17,11 @@ package services
 import (
 	"context"
 
-	"github.com/coinbase/rosetta-bitcoin/bitcoin"
-	"github.com/coinbase/rosetta-bitcoin/configuration"
+	"github.com/guapcrypto/rosetta-guapcoin/configuration"
+	"github.com/guapcrypto/rosetta-guapcoin/guap"
 
-	"github.com/coinbase/rosetta-sdk-go/server"
-	"github.com/coinbase/rosetta-sdk-go/types"
+	"github.com/guapcrypto/rosetta-sdk-go/server"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
 )
 
 // NetworkAPIService implements the server.NetworkAPIServicer interface.
@@ -67,7 +67,7 @@ func (s *NetworkAPIService) NetworkStatus(
 
 	peers, err := s.client.GetPeers(ctx)
 	if err != nil {
-		return nil, wrapErr(ErrBitcoind, err)
+		return nil, wrapErr(ErrGuapcoind, err)
 	}
 
 	cachedBlockResponse, err := s.i.GetBlockLazy(ctx, nil)
@@ -95,8 +95,8 @@ func (s *NetworkAPIService) NetworkOptions(
 			MiddlewareVersion: types.String(MiddlewareVersion),
 		},
 		Allow: &types.Allow{
-			OperationStatuses:       bitcoin.OperationStatuses,
-			OperationTypes:          bitcoin.OperationTypes,
+			OperationStatuses:       guap.OperationStatuses,
+			OperationTypes:          guap.OperationTypes,
 			Errors:                  Errors,
 			HistoricalBalanceLookup: HistoricalBalanceLookup,
 			MempoolCoins:            MempoolCoins,

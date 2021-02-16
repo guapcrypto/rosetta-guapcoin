@@ -18,16 +18,16 @@ import (
 	"context"
 	"testing"
 
-	"github.com/coinbase/rosetta-bitcoin/bitcoin"
-	"github.com/coinbase/rosetta-bitcoin/configuration"
-	mocks "github.com/coinbase/rosetta-bitcoin/mocks/services"
+	"github.com/guapcrypto/rosetta-guapcoin/configuration"
+	"github.com/guapcrypto/rosetta-guapcoin/guap"
+	mocks "github.com/guapcrypto/rosetta-guapcoin/mocks/services"
 
-	"github.com/coinbase/rosetta-sdk-go/types"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
 	"github.com/stretchr/testify/assert"
 )
 
 var (
-	middlewareVersion     = "0.0.9"
+	middlewareVersion     = "0.0.8"
 	defaultNetworkOptions = &types.NetworkOptionsResponse{
 		Version: &types.Version{
 			RosettaVersion:    types.RosettaAPIVersion,
@@ -35,16 +35,16 @@ var (
 			MiddlewareVersion: &middlewareVersion,
 		},
 		Allow: &types.Allow{
-			OperationStatuses:       bitcoin.OperationStatuses,
-			OperationTypes:          bitcoin.OperationTypes,
+			OperationStatuses:       guap.OperationStatuses,
+			OperationTypes:          guap.OperationTypes,
 			Errors:                  Errors,
 			HistoricalBalanceLookup: HistoricalBalanceLookup,
 		},
 	}
 
 	networkIdentifier = &types.NetworkIdentifier{
-		Network:    bitcoin.MainnetNetwork,
-		Blockchain: bitcoin.Blockchain,
+		Network:    guap.MainnetNetwork,
+		Blockchain: guap.Blockchain,
 	}
 )
 
@@ -81,7 +81,7 @@ func TestNetworkEndpoints_Online(t *testing.T) {
 	cfg := &configuration.Configuration{
 		Mode:                   configuration.Online,
 		Network:                networkIdentifier,
-		GenesisBlockIdentifier: bitcoin.MainnetGenesisBlockIdentifier,
+		GenesisBlockIdentifier: guap.MainnetGenesisBlockIdentifier,
 	}
 	mockIndexer := &mocks.Indexer{}
 	mockClient := &mocks.Client{}
@@ -104,7 +104,7 @@ func TestNetworkEndpoints_Online(t *testing.T) {
 	}
 	mockClient.On("GetPeers", ctx).Return([]*types.Peer{
 		{
-			PeerID: "77.93.223.9:8333",
+			PeerID: "34.231.101.5:9246",
 		},
 	}, nil)
 	mockIndexer.On(
@@ -118,11 +118,11 @@ func TestNetworkEndpoints_Online(t *testing.T) {
 	networkStatus, err := servicer.NetworkStatus(ctx, nil)
 	assert.Nil(t, err)
 	assert.Equal(t, &types.NetworkStatusResponse{
-		GenesisBlockIdentifier: bitcoin.MainnetGenesisBlockIdentifier,
+		GenesisBlockIdentifier: guap.MainnetGenesisBlockIdentifier,
 		CurrentBlockIdentifier: blockResponse.Block.BlockIdentifier,
 		Peers: []*types.Peer{
 			{
-				PeerID: "77.93.223.9:8333",
+				PeerID: "34.231.101.5:9246",
 			},
 		},
 	}, networkStatus)

@@ -18,25 +18,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
-	"sync"
 	"time"
 
-	"github.com/coinbase/rosetta-bitcoin/bitcoin"
-	"github.com/coinbase/rosetta-bitcoin/configuration"
-	"github.com/coinbase/rosetta-bitcoin/services"
-	"github.com/coinbase/rosetta-bitcoin/utils"
+	"github.com/guapcrypto/rosetta-guapcoin/configuration"
+	"github.com/guapcrypto/rosetta-guapcoin/guap"
+	"github.com/guapcrypto/rosetta-guapcoin/services"
+	"github.com/guapcrypto/rosetta-guapcoin/utils"
 
-	"github.com/coinbase/rosetta-sdk-go/asserter"
-	"github.com/coinbase/rosetta-sdk-go/storage/database"
-	storageErrs "github.com/coinbase/rosetta-sdk-go/storage/errors"
-	"github.com/coinbase/rosetta-sdk-go/storage/modules"
-	"github.com/coinbase/rosetta-sdk-go/syncer"
-	"github.com/coinbase/rosetta-sdk-go/types"
-	sdkUtils "github.com/coinbase/rosetta-sdk-go/utils"
+	"github.com/guapcrypto/rosetta-sdk-go/asserter"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/database"
+	storageErrs "github.com/guapcrypto/rosetta-sdk-go/storage/errors"
+	"github.com/guapcrypto/rosetta-sdk-go/storage/modules"
+	"github.com/guapcrypto/rosetta-sdk-go/syncer"
+	"github.com/guapcrypto/rosetta-sdk-go/types"
+	sdkUtils "github.com/guapcrypto/rosetta-sdk-go/utils"
 	"github.com/dgraph-io/badger/v2"
 	"github.com/dgraph-io/badger/v2/options"
-	"golang.org/x/sync/semaphore"
 )
 
 const (
@@ -61,15 +58,6 @@ const (
 
 	// zeroValue is 0 as a string
 	zeroValue = "0"
-
-	// overclockMultiplier is the amount
-	// we multiply runtime.NumCPU by to determine
-	// how many goroutines we should
-	// spwan to handle block data sequencing.
-	overclockMultiplier = 16
-
-	// semaphoreWeight is the weight of each semaphore request.
-	semaphoreWeight = int64(1)
 )
 
 var (
@@ -80,10 +68,10 @@ var (
 type Client interface {
 	NetworkStatus(context.Context) (*types.NetworkStatusResponse, error)
 	PruneBlockchain(context.Context, int64) (int64, error)
-	GetRawBlock(context.Context, *types.PartialBlockIdentifier) (*bitcoin.Block, []string, error)
+	GetRawBlock(context.Context, *types.PartialBlockIdentifier) (*guap.Block, []string, error)
 	ParseBlock(
 		context.Context,
-		*bitcoin.Block,
+		*guap.Block,
 		map[string]*types.AccountCoin,
 	) (*types.Block, error)
 }
@@ -109,20 +97,6 @@ type Indexer struct {
 	workers        []modules.BlockWorker
 
 	waiter *waitTable
-
-	// Store coins created in pre-store before persisted
-	// in add block so we can optimistically populate
-	// blocks before committed.
-	coinCache      map[string]*types.AccountCoin
-	coinCacheMutex *sdkUtils.PriorityMutex
-
-	// When populating blocks using pre-stored blocks,
-	// we should retry if a new block was seen (similar
-	// to trying again if head block changes).
-	seen      int64
-	seenMutex sync.Mutex
-
-	seenSemaphore *semaphore.Weighted
 }
 
 // CloseDatabase closes a storage.Database. This should be called
@@ -204,12 +178,12 @@ func Initialize(
 		return nil, fmt.Errorf("%w: unable to initialize storage", err)
 	}
 
-	blockStorage := modules.NewBlockStorage(localStore, runtime.NumCPU()*overclockMultiplier)
+	blockStorage := modules.NewBlockStorage(localStore)
 	asserter, err := asserter.NewClientWithOptions(
 		config.Network,
 		config.GenesisBlockIdentifier,
-		bitcoin.OperationTypes,
-		bitcoin.OperationStatuses,
+		guap.OperationTypes,
+		guap.OperationStatuses,
 		services.Errors,
 		nil,
 	)
@@ -218,17 +192,14 @@ func Initialize(
 	}
 
 	i := &Indexer{
-		cancel:         cancel,
-		network:        config.Network,
-		pruningConfig:  config.Pruning,
-		client:         client,
-		database:       localStore,
-		blockStorage:   blockStorage,
-		waiter:         newWaitTable(),
-		asserter:       asserter,
-		coinCache:      map[string]*types.AccountCoin{},
-		coinCacheMutex: new(sdkUtils.PriorityMutex),
-		seenSemaphore:  semaphore.NewWeighted(int64(runtime.NumCPU())),
+		cancel:        cancel,
+		network:       config.Network,
+		pruningConfig: config.Pruning,
+		client:        client,
+		database:      localStore,
+		blockStorage:  blockStorage,
+		waiter:        newWaitTable(),
+		asserter:      asserter,
 	}
 
 	coinStorage := modules.NewCoinStorage(
@@ -250,7 +221,7 @@ func Initialize(
 	return i, nil
 }
 
-// waitForNode returns once bitcoind is ready to serve
+// waitForNode returns once guapcoind is ready to serve
 // block queries.
 func (i *Indexer) waitForNode(ctx context.Context) error {
 	logger := utils.ExtractLogger(ctx, "indexer")
@@ -260,15 +231,15 @@ func (i *Indexer) waitForNode(ctx context.Context) error {
 			return nil
 		}
 
-		logger.Infow("waiting for bitcoind...")
+		logger.Infow("waiting for guapcoind...")
 		if err := sdkUtils.ContextSleep(ctx, nodeWaitSleep); err != nil {
 			return err
 		}
 	}
 }
 
-// Sync attempts to index Bitcoin blocks using
-// the bitcoin.Client until stopped.
+// Sync attempts to index guap blocks using
+// the guap.Client until stopped.
 func (i *Indexer) Sync(ctx context.Context) error {
 	if err := i.waitForNode(ctx); err != nil {
 		return fmt.Errorf("%w: failed to wait for node", err)
@@ -297,11 +268,10 @@ func (i *Indexer) Sync(ctx context.Context) error {
 		syncer.WithSizeMultiplier(sizeMultiplier),
 		syncer.WithPastBlocks(pastBlocks),
 	)
-
 	return syncer.Sync(ctx, startIndex, indexPlaceholder)
 }
 
-// Prune attempts to prune blocks in bitcoind every
+// Prune attempts to prune blocks in guapcoind every
 // pruneFrequency.
 func (i *Indexer) Prune(ctx context.Context) error {
 	logger := utils.ExtractLogger(ctx, "pruner")
@@ -320,25 +290,25 @@ func (i *Indexer) Prune(ctx context.Context) error {
 				continue
 			}
 
-			// Must meet pruning conditions in bitcoin core
+			// Must meet pruning conditions in guap core
 			// Source:
-			// https://github.com/bitcoin/bitcoin/blob/a63a26f042134fa80356860c109edb25ac567552/src/rpc/blockchain.cpp#L953-L960
+			// https://github.com/guap/guap/blob/a63a26f042134fa80356860c109edb25ac567552/src/rpc/blockchain.cpp#L953-L960
 			pruneHeight := head.Index - i.pruningConfig.Depth
 			if pruneHeight <= i.pruningConfig.MinHeight {
 				logger.Infow("waiting to prune", "min prune height", i.pruningConfig.MinHeight)
 				continue
 			}
 
-			logger.Infow("attempting to prune bitcoind", "prune height", pruneHeight)
+			logger.Infow("attempting to prune guapcoind", "prune height", pruneHeight)
 			prunedHeight, err := i.client.PruneBlockchain(ctx, pruneHeight)
 			if err != nil {
 				logger.Warnw(
-					"unable to prune bitcoind",
+					"unable to prune guapcoind",
 					"prune height", pruneHeight,
 					"error", err,
 				)
 			} else {
-				logger.Infow("pruned bitcoind", "prune height", prunedHeight)
+				logger.Infow("pruned guapcoind", "prune height", prunedHeight)
 			}
 		}
 	}
@@ -352,106 +322,6 @@ func (i *Indexer) BlockAdded(ctx context.Context, block *types.Block) error {
 	if err != nil {
 		return fmt.Errorf(
 			"%w: unable to add block to storage %s:%d",
-			err,
-			block.BlockIdentifier.Hash,
-			block.BlockIdentifier.Index,
-		)
-	}
-
-	ops := 0
-	for _, transaction := range block.Transactions {
-		ops += len(transaction.Operations)
-	}
-
-	// clean cache intermediate
-	i.coinCacheMutex.Lock(true)
-	for _, tx := range block.Transactions {
-		for _, op := range tx.Operations {
-			if op.CoinChange == nil {
-				continue
-			}
-
-			if op.CoinChange.CoinAction != types.CoinCreated {
-				continue
-			}
-
-			delete(i.coinCache, op.CoinChange.CoinIdentifier.Identifier)
-		}
-	}
-	i.coinCacheMutex.Unlock()
-
-	// Look for all remaining waiting transactions associated
-	// with the next block that have not yet been closed. We should
-	// abort these waits as they will never be closed by a new transaction.
-	i.waiter.Lock()
-	for txHash, val := range i.waiter.table {
-		if val.earliestBlock == block.BlockIdentifier.Index+1 && !val.channelClosed {
-			logger.Debugw(
-				"aborting channel",
-				"hash", block.BlockIdentifier.Hash,
-				"index", block.BlockIdentifier.Index,
-				"channel", txHash,
-			)
-			val.channelClosed = true
-			val.aborted = true
-			close(val.channel)
-		}
-	}
-	i.waiter.Unlock()
-
-	logger.Debugw(
-		"block added",
-		"hash", block.BlockIdentifier.Hash,
-		"index", block.BlockIdentifier.Index,
-		"transactions", len(block.Transactions),
-		"ops", ops,
-	)
-
-	return nil
-}
-
-// BlockSeen is called by the syncer when a block is encountered.
-func (i *Indexer) BlockSeen(ctx context.Context, block *types.Block) error {
-	if err := i.seenSemaphore.Acquire(ctx, semaphoreWeight); err != nil {
-		return err
-	}
-	defer i.seenSemaphore.Release(semaphoreWeight)
-
-	logger := utils.ExtractLogger(ctx, "indexer")
-
-	// load intermediate
-	i.coinCacheMutex.Lock(false)
-	for _, tx := range block.Transactions {
-		for _, op := range tx.Operations {
-			if op.CoinChange == nil {
-				continue
-			}
-
-			// We only care about newly accessible coins.
-			if op.CoinChange.CoinAction != types.CoinCreated {
-				continue
-			}
-
-			i.coinCache[op.CoinChange.CoinIdentifier.Identifier] = &types.AccountCoin{
-				Account: op.Account,
-				Coin: &types.Coin{
-					CoinIdentifier: op.CoinChange.CoinIdentifier,
-					Amount:         op.Amount,
-				},
-			}
-		}
-	}
-	i.coinCacheMutex.Unlock()
-
-	// Update so that lookers know it exists
-	i.seenMutex.Lock()
-	i.seen++
-	i.seenMutex.Unlock()
-
-	err := i.blockStorage.SeeBlock(ctx, block)
-	if err != nil {
-		return fmt.Errorf(
-			"%w: unable to encounter block to storage %s:%d",
 			err,
 			block.BlockIdentifier.Hash,
 			block.BlockIdentifier.Index,
@@ -484,12 +354,31 @@ func (i *Indexer) BlockSeen(ctx context.Context, block *types.Block) error {
 		val.channelClosed = true
 		close(val.channel)
 	}
+
+	// Look for all remaining waiting transactions associated
+	// with the next block that have not yet been closed. We should
+	// abort these waits as they will never be closed by a new transaction.
+	for txHash, val := range i.waiter.table {
+		if val.earliestBlock == block.BlockIdentifier.Index+1 && !val.channelClosed {
+			logger.Debugw(
+				"aborting channel",
+				"hash", block.BlockIdentifier.Hash,
+				"index", block.BlockIdentifier.Index,
+				"channel", txHash,
+			)
+			val.channelClosed = true
+			val.aborted = true
+			close(val.channel)
+		}
+	}
 	i.waiter.Unlock()
 
 	logger.Debugw(
-		"block seen",
+		"block added",
 		"hash", block.BlockIdentifier.Hash,
 		"index", block.BlockIdentifier.Index,
+		"transactions", len(block.Transactions),
+		"ops", ops,
 	)
 
 	return nil
@@ -530,11 +419,10 @@ func (i *Indexer) NetworkStatus(
 
 func (i *Indexer) findCoin(
 	ctx context.Context,
-	btcBlock *bitcoin.Block,
+	btcBlock *guap.Block,
 	coinIdentifier string,
 ) (*types.Coin, *types.AccountIdentifier, error) {
 	for ctx.Err() == nil {
-		startSeen := i.seen
 		databaseTransaction := i.database.ReadTransaction(ctx)
 		defer databaseTransaction.Discard(ctx)
 
@@ -572,14 +460,6 @@ func (i *Indexer) findCoin(
 			return nil, nil, fmt.Errorf("%w: unable to lookup coin %s", err, coinIdentifier)
 		}
 
-		// Check seen CoinCache
-		i.coinCacheMutex.Lock(false)
-		accCoin, ok := i.coinCache[coinIdentifier]
-		i.coinCacheMutex.Unlock()
-		if ok {
-			return accCoin.Coin, accCoin.Account, nil
-		}
-
 		// Locking here prevents us from adding sending any done
 		// signals while we are determining whether or not to add
 		// to the WaitTable.
@@ -589,20 +469,19 @@ func (i *Indexer) findCoin(
 		// we created our databaseTransaction.
 		currHeadBlock, err := i.blockStorage.GetHeadBlockIdentifier(ctx)
 		if err != nil {
-			i.waiter.Unlock()
 			return nil, nil, fmt.Errorf("%w: unable to get head block identifier", err)
 		}
 
 		// If the block has changed, we try to look up the transaction
 		// again.
-		if types.Hash(currHeadBlock) != types.Hash(coinHeadBlock) || i.seen != startSeen {
+		if types.Hash(currHeadBlock) != types.Hash(coinHeadBlock) {
 			i.waiter.Unlock()
 			continue
 		}
 
 		// Put Transaction in WaitTable if doesn't already exist (could be
 		// multiple listeners)
-		transactionHash := bitcoin.TransactionHash(coinIdentifier)
+		transactionHash := guap.TransactionHash(coinIdentifier)
 		val, ok := i.waiter.Get(transactionHash, false)
 		if !ok {
 			val = &waitTableEntry{
@@ -625,7 +504,7 @@ func (i *Indexer) findCoin(
 
 func (i *Indexer) checkHeaderMatch(
 	ctx context.Context,
-	btcBlock *bitcoin.Block,
+	btcBlock *guap.Block,
 ) error {
 	headBlock, err := i.blockStorage.GetHeadBlockIdentifier(ctx)
 	if err != nil && !errors.Is(err, storageErrs.ErrHeadBlockNotFound) {
@@ -645,7 +524,7 @@ func (i *Indexer) checkHeaderMatch(
 
 func (i *Indexer) findCoins(
 	ctx context.Context,
-	btcBlock *bitcoin.Block,
+	btcBlock *guap.Block,
 	coins []string,
 ) (map[string]*types.AccountCoin, error) {
 	if err := i.checkHeaderMatch(ctx, btcBlock); err != nil {
@@ -684,7 +563,7 @@ func (i *Indexer) findCoins(
 	shouldAbort := false
 	for _, coinIdentifier := range remainingCoins {
 		// Wait on Channel
-		txHash := bitcoin.TransactionHash(coinIdentifier)
+		txHash := guap.TransactionHash(coinIdentifier)
 		entry, ok := i.waiter.Get(txHash, true)
 		if !ok {
 			return nil, fmt.Errorf("transaction %s not in waiter", txHash)
@@ -746,7 +625,7 @@ func (i *Indexer) Block(
 	blockIdentifier *types.PartialBlockIdentifier,
 ) (*types.Block, error) {
 	// get raw block
-	var btcBlock *bitcoin.Block
+	var btcBlock *guap.Block
 	var coins []string
 	var err error
 
@@ -794,14 +673,14 @@ func (i *Indexer) Block(
 func (i *Indexer) GetScriptPubKeys(
 	ctx context.Context,
 	coins []*types.Coin,
-) ([]*bitcoin.ScriptPubKey, error) {
+) ([]*guap.ScriptPubKey, error) {
 	databaseTransaction := i.database.ReadTransaction(ctx)
 	defer databaseTransaction.Discard(ctx)
 
-	scripts := make([]*bitcoin.ScriptPubKey, len(coins))
+	scripts := make([]*guap.ScriptPubKey, len(coins))
 	for j, coin := range coins {
 		coinIdentifier := coin.CoinIdentifier
-		transactionHash, networkIndex, err := bitcoin.ParseCoinIdentifier(coinIdentifier)
+		transactionHash, networkIndex, err := guap.ParseCoinIdentifier(coinIdentifier)
 		if err != nil {
 			return nil, fmt.Errorf("%w: unable to parse coin identifier", err)
 		}
@@ -820,7 +699,7 @@ func (i *Indexer) GetScriptPubKeys(
 		}
 
 		for _, op := range transaction.Operations {
-			if op.Type != bitcoin.OutputOpType {
+			if op.Type != guap.OutputOpType {
 				continue
 			}
 
@@ -828,7 +707,7 @@ func (i *Indexer) GetScriptPubKeys(
 				continue
 			}
 
-			var opMetadata bitcoin.OperationMetadata
+			var opMetadata guap.OperationMetadata
 			if err := types.UnmarshalMap(op.Metadata, &opMetadata); err != nil {
 				return nil, fmt.Errorf(
 					"%w: unable to unmarshal operation metadata %+v",
